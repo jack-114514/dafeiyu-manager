@@ -1,0 +1,8 @@
+{
+  "napcatVersion": "4.18.42",
+  "qqVersion": "9.9.31-49738",
+  "archive": "https://github.com/NapNeko/NapCatQQ/releases/download/v4.18.42/NapCat.Shell.Windows.Node.zip",
+  "sha256": "77397ac38d66f46383e48f08f35d5f9d37ec575c22069f62d6c600e73b4521ed",
+  "source": "https://github.com/NapNeko/NapCatQQ/releases/tag/v4.18.42",
+  "dataIsolation": "NAPCAT_QQ_DATA_DIR and NAPCAT_WORKDIR; no upstream source patch"
+}

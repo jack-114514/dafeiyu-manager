@@ -1,0 +1,10 @@
+{
+  "runtimeDir": "C:/DafeiyuRuntime",
+  "harnessExe": "C:/Users/YOUR_WINDOWS_USER/AppData/Local/Programs/DeepSeek Harness/DeepSeek Harness.exe",
+  "harnessProfileDir": "C:/Users/YOUR_WINDOWS_USER/.dsh/profiles/desktop",
+  "fishHome": "C:/Users/YOUR_WINDOWS_USER/.dsh-fish",
+  "workspaceDir": "C:/DafeiyuWorkspace",
+  "botQQ": "REPLACE_WITH_BOT_QQ",
+  "ownerQQ": "REPLACE_WITH_OWNER_QQ",
+  "ffmpegExe": ""
+}

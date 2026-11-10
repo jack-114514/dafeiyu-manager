@@ -1,0 +1,16 @@
+# Merge this entry into the existing profile's cordis.patch.yml.
+- id: dsh-onebot
+  name: dsh-onebot-qq
+  config:
+    mode: reverse
+    host: 127.0.0.1
+    port: 8643
+    accessToken: 'REPLACE_WITH_A_PRIVATE_ONEBOT_TOKEN'
+    botQQ: 'REPLACE_WITH_BOT_QQ'
+    workspacePath: 'C:/DafeiyuWorkspace'
+    mediaDir: 'C:/DafeiyuRuntime/media'
+    adminUsers: ['REPLACE_WITH_OWNER_QQ']
+    allowFrom: ['REPLACE_WITH_OWNER_QQ']
+    allowAllUsers: false
+    dmPolicy: allowlist
+    groupPolicy: disabled

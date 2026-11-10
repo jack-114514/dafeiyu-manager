@@ -1,0 +1,17 @@
+{
+  "source": "https://github.com/Alterssss/dsh-bili-whale",
+  "version": "0.4.6",
+  "license": "MIT",
+  "source_archive_sha256": "adfd6045fb4288c2af48d8dc7b446e32a80ffcbfd161b0d66969b7177937627c",
+  "used_components": [
+    "QR authentication",
+    "credential store",
+    "read-only video CLI"
+  ],
+  "local_adaptation": [
+    "Harness 0.2.2 native tools and session API",
+    "separate activity clock and local login page",
+    "HTTP write methods denied in traffic.mjs when readOnly is true"
+  ],
+  "vendor_runtime_directory": "<runtimeDir>/bili-plugin"
+}
