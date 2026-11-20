@@ -8,7 +8,7 @@ $bootAction=New-ScheduledTaskAction -Execute $powerShell -WorkingDirectory $root
  -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+(Join-Path $root 'control.ps1')+'" -Action BootStart')
 $bootTrigger=New-ScheduledTaskTrigger -AtStartup
 $bootTrigger.Delay='PT20S'
-$bootSettings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
+$bootSettings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 Register-ScheduledTask -TaskPath '\' -TaskName 'DeepSeek-Dafeiyu-Boot' -Action $bootAction `
  -Trigger $bootTrigger -Settings $bootSettings -User $user -Password $Credential.GetNetworkCredential().Password `
  -Description 'Start Dafeiyu Harness and QQ after Windows boots' -RunLevel Limited -Force | Out-Null
@@ -24,7 +24,10 @@ Register-ScheduledTask -TaskPath '\' -TaskName 'DeepSeek-Dafeiyu-LogonWindow' -A
 $repairAction=New-ScheduledTaskAction -Execute $powerShell -WorkingDirectory $root `
  -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+(Join-Path $root 'control.ps1')+'" -Action RepairWatch')
 $repairTrigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes 2)
-$repairSettings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+$repairBoot=New-ScheduledTaskTrigger -AtStartup
+$repairBoot.Delay='PT1M'
+$repairBoot.Repetition=$repairTrigger.Repetition
+$repairSettings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
 Register-ScheduledTask -TaskPath '\' -TaskName 'DeepSeek-Dafeiyu-AutoRepair' -Action $repairAction `
- -Trigger $repairTrigger -Settings $repairSettings -User $user -Password $Credential.GetNetworkCredential().Password `
+ -Trigger @($repairTrigger,$repairBoot) -Settings $repairSettings -User $user -Password $Credential.GetNetworkCredential().Password `
  -Description 'Recover Dafeiyu processes and the QQ connection after confirmed failures' -RunLevel Limited -Force | Out-Null

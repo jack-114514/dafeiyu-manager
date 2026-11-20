@@ -70,9 +70,16 @@ function Snapshot {
    if($online){$info=Api 'QQLogin/GetQQLoginInfo';$actualQQ=[string]$info.data.uin;$accountMismatch=$actualQQ -ne $qq;if($accountMismatch){$online=$false}}
    if($online){$detail='QQ 已登录'}elseif($state.data.isOffline){$detail='QQ 已离线，请打开登录页'}else{$detail='等待 QQ 登录'}
    if($accountMismatch){$detail='登录了其他 QQ，请使用配置中的机器人账号'}
-  }catch{$detail='QQ 后台存在，管理接口暂未就绪'}
+  }catch{$online=$false;$detail='QQ 后台存在，管理接口暂未就绪'}
  }
- $bridge=@(Get-NetTCPConnection -State Established -LocalPort 8643 -ErrorAction SilentlyContinue).Count -gt 0
+ $harnessIds=@($s.harness.ProcessId)
+ $napcatIds=@($s.napcat.ProcessId)
+ $listener=@(Get-NetTCPConnection -State Listen -LocalPort 8643 -ErrorAction SilentlyContinue | Where-Object {$_.OwningProcess -in $harnessIds}).Count -gt 0
+ $bridge=$false
+ if($listener -and $napcatIds.Count){
+  $peers=@(Get-NetTCPConnection -State Established -RemotePort 8643 -RemoteAddress '127.0.0.1' -ErrorAction SilentlyContinue | Where-Object {$_.OwningProcess -in $napcatIds})
+  $bridge=@(Get-NetTCPConnection -State Established -LocalPort 8643 -ErrorAction SilentlyContinue | Where-Object {$_.OwningProcess -in $harnessIds -and $_.RemotePort -in $peers.LocalPort}).Count -gt 0
+ }
  $life=$null
  if(Test-Path "$Runtime\life\status.json"){try{$life=Get-Content "$Runtime\life\status.json" -Raw -Encoding UTF8|ConvertFrom-Json}catch{}}
  $lifeEnabled=$false
@@ -84,10 +91,11 @@ function Snapshot {
  $replySummary=if($fresh){$health.summary}else{'Harness 回复后台心跳缺失或过期，请重新检查'}
  if(-not $online){$replyLevel='unverified';$replySummary='QQ 尚未登录，请打开登录网页；保存的授权失效时需要重新扫码'}
  if($accountMismatch){$replyLevel='error';$replySummary=$detail}
- $qqSessionState=if($accountMismatch){'wrong_account'}elseif($fresh -and $health.sessionProbe.kind -eq 'needs_login'){'needs_login'}elseif($fresh -and $health.sessionProbe.kind -eq 'failed' -and $health.sessionProbe.failures -ge 2){'failed'}elseif($fresh -and $health.sessionProbe.kind -eq 'ok'){'ok'}else{'unknown'}
+ $probeFresh=$fresh -and $health.sessionProbe.checkedAt -and ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()-[double]$health.sessionProbe.checkedAt -lt 300000)
+ $qqSessionState=if($accountMismatch){'wrong_account'}elseif($probeFresh -and $health.sessionProbe.kind -eq 'needs_login'){'needs_login'}elseif($probeFresh -and $health.sessionProbe.kind -eq 'failed' -and $health.sessionProbe.failures -ge 2){'failed'}elseif($probeFresh -and $health.sessionProbe.kind -eq 'ok'){'ok'}else{'unknown'}
  $tasks=@(foreach($name in $AutoStartTasks){Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue})
  $repair=Get-ScheduledTask -TaskName $RepairTask -TaskPath '\' -ErrorAction SilentlyContinue
- return @{autoRepairAvailable=$null -ne $repair;autoRepairEnabled=[bool]$repair.Settings.Enabled;autoStartAvailable=$tasks.Count -eq $AutoStartTasks.Count;autoStartEnabled=@($tasks|Where-Object {$_.Settings.Enabled}).Count -eq $AutoStartTasks.Count;harnessRunning=$s.harness.Count -gt 0;napcatRunning=$s.napcat.Count -gt 0;online=$online;paused=$paused;bridgeConnected=$bridge;qq=$qq;detail=$detail;lifeEnabled=$lifeEnabled;biliLoggedIn=[bool]$life.loggedIn;lifeActive=[bool]$life.active;diaryCount=[int]$life.diaryCount;lifeInstalled=[bool]$life.installed;replyLevel=$replyLevel;replySummary=$replySummary;qqSessionState=$qqSessionState;lastInbound=[double]$health.lastInbound;lastOutbound=[double]$health.lastOutbound}
+ return @{harnessListening=$listener;healthFresh=[bool]$fresh;autoRepairAvailable=$null -ne $repair;autoRepairEnabled=[bool]$repair.Settings.Enabled;autoStartAvailable=$tasks.Count -eq $AutoStartTasks.Count;autoStartEnabled=@($tasks|Where-Object {$_.Settings.Enabled}).Count -eq $AutoStartTasks.Count;harnessRunning=$s.harness.Count -gt 0;napcatRunning=$s.napcat.Count -gt 0;online=$online;paused=$paused;bridgeConnected=$bridge;qq=$qq;detail=$detail;lifeEnabled=$lifeEnabled;biliLoggedIn=[bool]$life.loggedIn;lifeActive=[bool]$life.active;diaryCount=[int]$life.diaryCount;lifeInstalled=[bool]$life.installed;replyLevel=$replyLevel;replySummary=$replySummary;qqSessionState=$qqSessionState;lastInbound=[double]$health.lastInbound;lastOutbound=[double]$health.lastOutbound}
 }
 $serviceLock=$null
 $lockTaken=$false
@@ -103,6 +111,7 @@ try {
  $Harness=$instance.harnessExe
  $Patch=Join-Path $instance.harnessProfileDir 'cordis.patch.yml'
  $BotQQ=$instance.botQQ
+ $OwnerQQ=$instance.ownerQQ
  $message='检查完成'
  switch($Action){
   'RepairWatch' {Invoke-AutoRepair;return}
@@ -126,6 +135,7 @@ try {
   }
   {$_ -in @('Start','BootStart')} {
    $boot=$Action -eq 'BootStart'
+   if($boot -and (Test-RepairStopped (Get-RepairBootId))){return}
    Set-RepairArmed
    $s=Services
    if($s.harness.Count -eq 0){
@@ -154,7 +164,7 @@ try {
        $cache=Api 'QQLogin/GetQuickLoginList'
       }
       if(@($cache.data) -contains $BotQQ){
-       $login=Api 'QQLogin/SetQuickLogin' @{uin=$BotQQ}
+       $login=if($boot){Invoke-SavedQQLogin $cache}else{Api 'QQLogin/SetQuickLogin' @{uin=$BotQQ}}
        if($login.code -eq 0){Start-Sleep -Seconds 2}
       }
      }catch{ } # Expired saved authorization falls back to QR login.
@@ -169,8 +179,8 @@ try {
   'Pause' {Set-Paused $true;$message='已暂停自动回复，QQ 保持登录'}
   'Resume' {Set-Paused $false;$message='已恢复自动回复'}
   'Stop' {
-   if(Test-Path -LiteralPath $RepairArmFile){Remove-Item -LiteralPath $RepairArmFile}
-   Set-Paused $true
+   New-Item -ItemType Directory -Path (Split-Path -Parent $RepairArmFile) -Force | Out-Null
+   [IO.File]::WriteAllText($RepairArmFile,('stopped:'+(Get-RepairBootId)),$Utf8)
    Stop-ScheduledTask -TaskName 'DeepSeek-Dafeiyu-QQ' -ErrorAction SilentlyContinue
    $s=Services
    $master=@($s.napcat|Where-Object {$_.ParentProcessId -notin @($s.napcat.ProcessId)})
@@ -222,12 +232,15 @@ try {
  $result=Snapshot
  if($Action -eq 'BootStart'){
   $waiting=[Diagnostics.Stopwatch]::StartNew()
-  while($waiting.Elapsed.TotalSeconds -lt 40 -and -not ($result.harnessRunning -and $result.bridgeConnected -and $result.qqSessionState -eq 'ok')){
-   Start-Sleep -Seconds 2
+  $bootReady=Test-BootReady $result
+  while(-not $bootReady -and $waiting.Elapsed.TotalSeconds -lt 120){
+   Start-Sleep -Seconds 4
    $result=Snapshot
+   $bootReady=Test-BootReady $result
   }
-  $result.ok=$result.harnessRunning -and $result.napcatRunning -and $result.online -and $result.bridgeConnected -and $result.qqSessionState -eq 'ok'
-  $result.message=$message
+  $result.ok=$bootReady
+  $result.message=if($result.ok){'开机检查通过，QQ 与 Harness 已连接'}elseif($result.online){'开机检查未通过，QQ 或 Harness 的连接尚未就绪'}else{$result.detail}
+  $result.bootId=Get-RepairBootId
   $result.checkedAt=[DateTime]::UtcNow.ToString('o')
   $logs=Join-Path $Manager 'logs'
   New-Item -ItemType Directory -Path $logs -Force | Out-Null
